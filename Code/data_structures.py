@@ -100,7 +100,7 @@ class Observation(object):
         if params.subtract_sky:
             self.data = IM.subtract_sky(self.data,params)
         self.fw, self.roundness, self.sky, self.signal = -1.0, -1.0, -1.0, -1.0
-        if 20 < self.data_median < 0.5*params.pixel_max:
+        if params.pixel_min < self.data_median < 0.5*params.pixel_max:
             self.fw, self.roundness, self.sky, self.signal = IM.compute_fwhm(self,params,
                                                             seeing_file=params.loc_output+os.path.sep+'seeing')
         del self.mask

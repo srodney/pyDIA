@@ -587,7 +587,7 @@ def imsub_all_fits(params,reference='ref.fits'):
 			if os.path.exists(stamp_file):
 				stamp_positions = np.genfromtxt(stamp_file)
 			else:
-				stars = PF.choose_stamps(ref,params)
+				stars = PH.choose_stamps(ref,params)
 				stamp_positions = stars[:,0:2]
 				np.savetxt(stamp_file,stamp_positions)
 

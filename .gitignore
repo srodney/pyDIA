@@ -1,0 +1,17 @@
+# Compiled files
+*.py[co]
+*.a
+*.o
+*.so
+__pycache__
+
+# PyCharm Project files
+.idea
+
+# Mac OSX
+.DS_Store
+
+#Cruft
+*~
+#*#
+.#*
