@@ -39,41 +39,6 @@ if _SPINANDTRIM:
             iref = i
     refimname = inlist[iref]
 
-    print('Spinning and trimming Input Images: ' + str(inlist))
-    print("Ref image: " + refimname)
-
-    trim_image_list = []
-    hdr_imref = fits.getheader(refimname)
-    wcs_imref = WCS(hdr_imref)
-    for i in range(len(inlist)):
-        imname_trimmed = os.path.basename(inlist[i]).replace(
-            '.fits', '_trim.fits')
-        if os.path.isfile(imname_trimmed):
-            print("%s exists.  Skipping trimming."%imname_trimmed)
-        if _VERBOSE:
-            print("Reprojecting %s to x,y frame of %s "%(
-                inlist[i],refimname))
-        im = fits.open(inlist[i])
-        if i != iref:
-            array, footprint = reproject_interp(im[0], hdr_imref)
-        else:
-            # Ref image does not need reprojection
-            array = im[0].data
-
-        # Trim off the outer _TRIMFRAC to reduce chances of NaN errors due to
-        # empty array segments after rotation (also speeds up DIA processing)
-        arraysize = array.shape
-        cutout = Cutout2D(array, position=[arraysize[1]/2., arraysize[0]/2.],
-                          size=[round(arraysize[1]*(1-_TRIMFRAC)),
-                                round(arraysize[0]*(1-_TRIMFRAC))],
-                          wcs=wcs_imref)
-
-        # save reprojected-and-trimmed image:
-        im[0].data = cutout.data
-        im[0].header.update(cutout.wcs.to_header())
-        im.writeto(imname_trimmed, output_verify='fix+warn')
-        im.close()
-        trim_image_list.append(imname_trimmed)
 
 if _MAKEDIFFS:
     # Use PYDIA to make all the diff images.
