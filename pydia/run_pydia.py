@@ -11,6 +11,7 @@ from __future__ import print_function
 
 #TODO : replace getopt with argparse
 #TODO : update documentation
+#TODO : make it so '--verbose' causes status to print to stdout, not just log
 
 import sys, getopt
 import os
@@ -22,27 +23,31 @@ from reproject import reproject_interp
 from astropy.nddata.utils import Cutout2D
 import glob
 
-def spin_and_trim(imlist, refimname, trimfrac=0.4, verbose=False):
+def spin_and_trim(imlist, refimname, trimfrac=0.4, trimdir='DIA_TRIM',
+                  verbose=False):
     """ Rotate images to match the WCS of the reference image (spin) and then
     cut off a fraction of the outer region of the image (trim).
     Returns a list of the trimmed images.
     """
-    trimfrac = trimfrac
     if verbose:
         print('Spinning Input Images: ' + str(imlist))
         print("to match WCS of Ref image: " + refimname)
         print("and trimming by : %i pct"%(trimfrac*100))
 
+    if not os.path.exists(trimdir):
+        os.makedirs(trimdir)
     trimmed_image_list = []
     hdr_imref = fits.getheader(refimname)
     wcs_imref = WCS(hdr_imref)
-    for imname in imlist:
-        imname_trimmed = imname.replace('.fits', '_trim.fits')
+    for imname in list(imlist) + [refimname]:
+        imname_trimmed = os.path.join(
+            trimdir, os.path.basename(imname).replace('.fits', '_trim.fits'))
         if os.path.isfile(imname_trimmed):
-            print("%s exists.  Skipping trimming."%imname_trimmed)
+            print("%s exists.  Skipping trimming."%imname_trimmed,
+                  file=sys.stderr)
         if verbose:
             print("Reprojecting %s to x,y frame of %s " % (
-                imname, refimname))
+                imname, refimname), file=sys.stderr)
         im = fits.open(imname)
         if imname != refimname:
             array, footprint = reproject_interp(im[0], hdr_imref)
@@ -64,43 +69,39 @@ def spin_and_trim(imlist, refimname, trimfrac=0.4, verbose=False):
         im.writeto(imname_trimmed, output_verify='fix+warn')
         im.close()
 
-        # TODO : handle this with parameters
-        # move input image into sub-folder
-        imname_moved = os.path.join('UNTRIMMED', os.path.basename(imname))
-        if not os.path.exists('UNTRIMMED'):
-            os.makedirs('UNTRIMMED')
-        os.rename(imname, imname_moved)
         trimmed_image_list.append(imname_trimmed)
     return(trimmed_image_list)
 
 
-def runpydia(parameters):
+def runpydia(params):
     #from pydia import calibration_functions as cal
 
-    params =parameters
-
-    #
-    # Import the high-level pipeline routines #
+    # Import the high-level pipeline routines
     use_GPU = params.use_GPU
     if use_GPU:
         from pydia import DIA_GPU as DIA
+        if params.verbose:
+            print("Using GPU version of PyDIA.", file=sys.stderr)
     else:
         from pydia import DIA_CPU as DIA
+        if params.verbose:
+            print("Using CPU version of PyDIA.", file=sys.stderr)
 
     if params.ref_image:
         # User has provided a single image to use as the reference image, so
         # write this into the refimagelist and update the params.
-        params.ref_image_list = os.path.join(params.loc_data,
-                                             'ref_image_list.txt')
+        if params.verbose:
+            print("Setting ref image to %s"%params.ref_image, file=sys.stderr)
+        params.ref_image_list = 'ref_image_list.txt'
         fout = open(params.ref_image_list, 'w')
         print(params.ref_image, file=fout)
         fout.close()
 
     init=datetime.datetime.now()
     time_int =  time.time()
-    log_file= os.path.join(parameters.loc_output, "pydia_run_log.log")
-    if not os.path.exists(parameters.loc_output):
-        os.makedirs(parameters.loc_output)
+    log_file= os.path.join(params.loc_output, "pydia_run_log.log")
+    if not os.path.exists(params.loc_output):
+        os.makedirs(params.loc_output)
     f=open(log_file,"a+")
     f.write(str(init)+" processing "+params.loc_data +" in "+params.loc_output +"\n")
     f.close()
@@ -108,10 +109,17 @@ def runpydia(parameters):
     # first, spin and trim the input images
     #try:
     if True:
+        if params.verbose:
+            print("Spinning WCS and trimming to match ref image",
+                  file=sys.stderr)
+
         image_list = glob.glob(os.path.join(params.loc_data, params.name_pattern))
         #TODO : accommodate cases where more than one ref image provided
-        trimmed_image_list = spin_and_trim(image_list, params.ref_image,
-                                           params.trimfrac)
+        trimmed_image_list = spin_and_trim(
+            image_list, params.ref_image, trimfrac=params.trimfrac,
+            trimdir=params.loc_trim, verbose=params.verbose)
+        params.ref_image = trimmed_image_list[-1]
+        params.loc_data = params.loc_trim
         # TODO : write something useful to the log file
     # except:
     else:
@@ -126,11 +134,12 @@ def runpydia(parameters):
     if True:
         # after spinning and trimming, we only want to process _trim.fits files
         # TODO: make this better!
-        if params.name_pattern.endswith("*.fits"):
-            params.name_pattern.replace("*.fits","*_trim.fits")
+        #if(params.name_pattern.endswith(".fits") and not
+        #    params.name_pattern.endswith("trim.fits")):
+        #    params.name_pattern.replace(".fits","trim.fits")
 
-        if not os.path.exists(params.loc_output):
-            DIA.imsub_all_fits(params)
+        #if not os.path.exists(params.loc_output):
+        DIA.imsub_all_fits(params)
 
         # TODO : do we need to do the calibrate step?
         # If so, need to include more dependencies, like sklearn
@@ -264,11 +273,12 @@ def main(argv):
 
     try:
         opts, args = getopt.getopt(
-            argv, "hvi:o:",
+            argv, "hvi:o:t:",
             ["bdeg=", "ccd_group_size=", "cluster_mask_radius=", "datekey=", "detect_threshold=",
             "diff_std_threshold=", "do_photometry=", "fft_kernel_threshold=", "fwhm_mult=",
             "fwhm_section=", "gain=", "image_list_file=", "iterations=",
-            "kernel_maximum_radius=", "kernel_minimum_radius=", "loc_data=", "loc_output=",
+            "kernel_maximum_radius=", "kernel_minimum_radius=",
+             "loc_data=", "loc_output=", "loc_trim=",
             "make_difference_images=", "mask_cluster=", "min_ref_images=", "n_parallel=",
             "name_pattern=", "nstamps=", "pdeg=", "pixel_max=", "pixel_min=",
             "pixel_rejection_threshold=", "preconvolve_images=", "preconvolve_FWHM=",
@@ -304,7 +314,10 @@ def main(argv):
 
     parameters.loc_input = 'DIA_IN'
     parameters.loc_data = 'DIA_IN'
+    parameters.loc_trim = 'DIA_TRIM'
     parameters.loc_output = 'DIA_OUT'
+    parameters.ref_image = None
+    parameters.verbose = False
 
     for opt, arg in opts:
         if opt in ('-h', "--help"):
@@ -314,6 +327,8 @@ def main(argv):
             parameters.verbose = True
         elif opt in ("-i", "--loc_data"):
             parameters.loc_data = arg
+        elif opt in ("-t", "--loc_trim"):
+            parameters.loc_trim = arg
         elif opt in ("-o", "--loc_output"):
             parameters.loc_output = arg
         else:
