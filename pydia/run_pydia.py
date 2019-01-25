@@ -23,6 +23,32 @@ from reproject import reproject_interp
 from astropy.nddata.utils import Cutout2D
 import glob
 
+def set_default_parameters():
+    from pydia import data_structures as DS
+
+    parameters = DS.Parameters()
+
+    # Set some defaults appropriate for the LCOGT data processing:
+    parameters.name_pattern = '*.fits'
+    parameters.trimfrac = 0.4
+    parameters.min_ref_images = 1
+    parameters.use_GPU = False
+    parameters.do_photometry = False
+    parameters.psf_fit_radius = 5
+    parameters.use_stamps = True
+    parameters.nstamps = 50
+    parameters.subtract_sky = True
+    parameters.pixel_min = 0.
+    parameters.pixel_max = 50000.
+
+    parameters.loc_input = 'DIA_IN'
+    parameters.loc_data = 'DIA_IN'
+    parameters.loc_trim = 'DIA_TRIM'
+    parameters.loc_output = 'DIA_OUT'
+    parameters.ref_image = None
+    parameters.verbose = False
+    return(parameters)
+
 def spin_and_trim(imlist, refimname, trimfrac=0.4, trimdir='DIA_TRIM',
                   verbose=False):
     """ Rotate images to match the WCS of the reference image (spin) and then
@@ -73,7 +99,7 @@ def spin_and_trim(imlist, refimname, trimfrac=0.4, trimdir='DIA_TRIM',
     return(trimmed_image_list)
 
 
-def runpydia(params):
+def make_diff_images(params):
     #from pydia import calibration_functions as cal
 
     # Import the high-level pipeline routines
@@ -269,7 +295,6 @@ def getTypeValue(value):
         return value
 
 def main(argv):
-    from pydia import data_structures as DS
 
     try:
         opts, args = getopt.getopt(
@@ -297,27 +322,7 @@ def main(argv):
         print('run_pyDIA.py -i <Imagefolder> -o <Outputfolder>')
         sys.exit(2)
 
-    parameters = DS.Parameters()
-
-    # Set some defaults appropriate for the LCOGT data processing:
-    parameters.name_pattern = '*.fits'
-    parameters.trimfrac = 0.4
-    parameters.min_ref_images = 1
-    parameters.use_GPU = False
-    parameters.do_photometry = False
-    parameters.psf_fit_radius = 5
-    parameters.use_stamps = True
-    parameters.nstamps = 50
-    parameters.subtract_sky = True
-    parameters.pixel_min = 0.
-    parameters.pixel_max = 50000.
-
-    parameters.loc_input = 'DIA_IN'
-    parameters.loc_data = 'DIA_IN'
-    parameters.loc_trim = 'DIA_TRIM'
-    parameters.loc_output = 'DIA_OUT'
-    parameters.ref_image = None
-    parameters.verbose = False
+    parameters = set_default_params()
 
     for opt, arg in opts:
         if opt in ('-h', "--help"):
@@ -342,7 +347,7 @@ def main(argv):
         refimlist = glob.glob(os.path.join(refdir,"*.fits"))
         parameters.ref_image = refimlist[0]
 
-    runpydia(parameters)
+    make_diff_images(parameters)
 
 if __name__ == "__main__":
    main(sys.argv[1:])
