@@ -322,7 +322,7 @@ def main(argv):
         print('run_pyDIA.py -i <Imagefolder> -o <Outputfolder>')
         sys.exit(2)
 
-    parameters = set_default_params()
+    parameters = set_default_parameters()
 
     for opt, arg in opts:
         if opt in ('-h', "--help"):
