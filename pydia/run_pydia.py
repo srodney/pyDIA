@@ -133,8 +133,7 @@ def make_diff_images(params):
     f.close()
 
     # first, spin and trim the input images
-    #try:
-    if True:
+    try:
         if params.verbose:
             print("Spinning WCS and trimming to match ref image",
                   file=sys.stderr)
@@ -147,8 +146,7 @@ def make_diff_images(params):
         params.ref_image = trimmed_image_list[-1]
         params.loc_data = params.loc_trim
         # TODO : write something useful to the log file
-    # except:
-    else:
+    except:
         out=datetime.datetime.now()
         time_out =  time.time()
         f=open(log_file,"a+")
@@ -156,8 +154,7 @@ def make_diff_images(params):
         f.close()
 
     # Next, run PyDIA to make diff images (no photometry!)
-    #try:
-    if True:
+    try:
         # after spinning and trimming, we only want to process _trim.fits files
         # TODO: make this better!
         #if(params.name_pattern.endswith(".fits") and not
@@ -171,18 +168,46 @@ def make_diff_images(params):
         # If so, need to include more dependencies, like sklearn
         #cal.calibrate(params.loc_output)
         out=datetime.datetime.now()
+        add_wcs_to_diffs(params)
+
         time_out =  time.time()
         f=open(log_file,"a+")
         f.write(str(out)+" Success!  Processed "+params.loc_data +" into "+params.loc_output +" in "+ str((time_out-time_int)/60)+ " min \n")
         f.close()
+
         # TODO: clean up after successful completion
-    #except:
-    else:
+    except:
         out=datetime.datetime.now()
         time_out =  time.time()
         f=open(log_file,"a+")
         f.write(str(out)+" error "+str(sys.exc_info()[0])+params.loc_data +" in "+params.loc_output +" "+ str((time_out-time_int)/60)+ " min \n")
         f.close()
+
+
+def add_wcs_to_diffs(params):
+    # Third, add the ref image WCS to each of the diff images
+    wcsref = None
+    if os.path.exists(params.ref_image):
+        wcsref = WCS(params.ref_image)
+    else:
+        refimlist = params.ref_image_list
+        fin = open(refimlist, 'r')
+        refimlist = fin.readlines()
+        fin.close()
+        if len(refimlist)>0 and os.path.exists(refimlist[0]):
+            wcsref = WCS(refimlist[0])
+    if wcsref is None:
+        print("WARNING: no ref image found for copying WCS to diff images",
+              file=sys.stderr)
+    diffimlist = glob.glob(os.path.join(params.loc_output,'d_*'))
+    for diffim in diffimlist:
+        hdu = fits.open(diffim,'update')
+        hdu[0].header.update(wcsref.to_header())
+        hdu.flush()  # redundant. close() will do this.
+        hdu.close()
+        if params.verbose:
+            print("WCS updated for %s"%diffim)
+
 
 
 def viewHelp():
