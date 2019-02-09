@@ -242,7 +242,7 @@ def process_reference_image_helper(args):
     return process_reference_image(*args)
 
 
-def make_reference(files, reg, params, reference_image='ref.fits'):
+def make_reference(files, params, reference_image='ref.fits'):
     seeing = {}
     sky = {}
     ref_seeing = 1000
@@ -621,7 +621,7 @@ def imsub_all_fits(params, reference='ref.fits'):
     if not (os.path.exists(params.loc_output + os.path.sep + reference)):
         print
         'Reg = ', reg.name
-        stamp_positions = make_reference(files, reg, params,
+        stamp_positions = make_reference(files, params,
                                          reference_image=reference)
         ref = DS.Observation(params.loc_output + os.path.sep + reference,
                              params)
