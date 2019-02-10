@@ -32,10 +32,9 @@ def set_default_parameters():
     parameters.min_ref_images = 1
     parameters.reference_seeing_factor = 1.1
     parameters.use_GPU = False
-    parameters.use_stamps = False
     parameters.do_photometry = False
     parameters.psf_fit_radius = 5
-    parameters.use_stamps = True
+    parameters.use_stamps = False
     parameters.nstamps = 50
     parameters.subtract_sky = True
     parameters.pixel_min = 0.
@@ -107,6 +106,29 @@ def spin_and_trim(imlist, wcsrefimname, trimfrac=0.4, trimdir='DIA_TRIM',
     return(trimmed_image_list)
 
 
+def get_observation_list(filenamelist, params):
+    """ From a given list of filenames, make a list of images as
+    pyDIA Observation objects.
+    If user has specified a full path to the input image files,
+    use that full path.  If not, then check if each input image
+    file exists as a trimmed  version, and use that.  If not, fall
+    back is to use the original untrimmed image.
+    """
+    observationslist = []
+    for filename in filenamelist:
+        if filename.endswith('_trim.fits'):
+            ftrimname = os.path.basename(filename)
+        else:
+            ftrimname = os.path.basename(filename).replace('.fits', '_trim.fits')
+        trimfile = os.path.join(params.loc_trim, ftrimname)
+        imfile = os.path.join(params.loc_data, os.path.basename(filename))
+        for f in [filename, trimfile, imfile]:
+            if os.path.exists(f):
+                g = DS.Observation(f, params)
+                observationslist.append(g)
+                break
+    return(observationslist)
+
 
 def register_images(files, params):
     """Register the images in the given files list.
@@ -163,62 +185,29 @@ def make_ref_image(params):
         print("Missing ref image list file %s"%params.ref_image_list)
         return(None)
     fin = open(params.ref_image_list, 'r')
-    ref_input_files = [f.strip() for f in fin.readlines()]
+    ref_input_filenames = [f.strip() for f in fin.readlines()]
     fin.close()
 
-    reffilelist = []
-    for filename in ref_input_files :
-        # Build a list of ref image inputs, as Observation objects.
-        # If user has specified a full path to the input image files,
-        # use that full path.  If not, then check if each input ref image
-        # file exists as a trimmed  version, and use that.  If not, fall
-        # back is to use the original untrimmed image.
-        if filename.endswith('_trim.fits'):
-            ftrimname = os.path.basename(filename)
-        else:
-            ftrimname = os.path.basename(filename).replace('.fits', '_trim.fits')
-        trimfile = os.path.join(params.loc_trim, ftrimname)
-        imfile = os.path.join(params.loc_data, os.path.basename(filename))
-        for f in [filename, trimfile, imfile]:
-            if os.path.exists(f):
-                g = DS.Observation(f, params)
-                reffilelist.append(g)
-                break
-
-    registered_reffilelist = register_images(reffilelist, params)
+    ref_image_list = get_observation_list(ref_input_filenames, params)
+    registered_ref_image_list = register_images(ref_image_list, params)
 
     # Make the photometric reference image if we don't have it.
     # Find stamp positions if required.
-    stamp_positions = DIA.make_reference(registered_reffilelist, params,
+    stamp_positions = DIA.make_reference(registered_ref_image_list, params,
                                          reference_image=refimname)
     refim = DS.Observation(refimpath, params)
     # Register the newly made reference image #
     #TODO: ref image registration is superfluous? maybe a symlink would work?
     registered_refimlist = register_images([refim], params)
 
-    # TODO: investigate what is really being done here
-    #  Apply saturation mask and boxcar blurring (?) to reference image
-    mask, _ = IO.read_fits_file(
-            params.loc_output + os.path.sep + 'mask_' + refimname)
-    refim.mask = mask
-
-    pm = params.pixel_max
-    params.pixel_max *= 0.9
-    refim.mask *= IM.compute_saturated_pixel_mask(refim.image, 4, params)
-    params.pixel_max = pm
-    refim.blur = IM.boxcar_blur(refim.image)
-    if params.mask_cluster:
-        refim.mask *= IM.mask_cluster(refim.image, refim.mask, params)
-
     # TODO : we need to add a header and WCS?
     return(refim)
 
 
+def make_diff_images(filenamelist, refim, params):
+    """ make a diff image for each file in filenamelist: file - refim.
 
-def make_diff_images(filelist, refim, params):
-    """ make a diff image for each file in filelist: file - refim.
-
-    filelist :  list of filenames for 'target' images
+    filenamelist :  list of filenames for 'target' images
     refim : reference image, either a filename or a DIA Observation object
     params : DIA parameters object
     """
@@ -233,32 +222,48 @@ def make_diff_images(filelist, refim, params):
     if isinstance(refim, str) and os.path.exists(refim):
         refim = DS.Observation(refim, params)
 
+    # TODO: investigate what is really being done here:
+    #  Apply saturation mask and boxcar blurring to reference image
+    mask, _ = IO.read_fits_file(
+            params.loc_output + os.path.sep + 'mask_' + refim.name)
+    refim.mask = mask
+    pm = params.pixel_max
+    params.pixel_max *= 0.9
+    refim.mask *= IM.compute_saturated_pixel_mask(refim.image, 4, params)
+    params.pixel_max = pm
+    refim.blur = IM.boxcar_blur(refim.image)
+    if params.mask_cluster:
+        refim.mask *= IM.mask_cluster(refim.image, refim.mask, params)
+
+    # For each given filename, get a pyDIA observation object
+    image_list = get_observation_list(filenamelist, params)
+
     # Register the images, using the ref image as the registration template,
     # unless the user has specified otherwise
     if not params.registration_image:
-        params.registration_image = refim.name
-    registered_filelist = register_images(filelist, params)
+        params.registration_image = refim.fullname
+    registered_image_list = register_images(image_list, params)
 
-    # make a diff image: f - ref
-    for f in registered_filelist:
+    # make diff images: im - ref
+    for im in registered_image_list:
         result = DIA.difference_image(
-            refim, f, params,
+            refim, im, params,
             stamp_positions=stamp_positions,
             psf_image=params.loc_output + os.path.sep + 'psf.fits',
             star_positions=star_positions,
             star_group_boundaries=star_group_boundaries,
             detector_mean_positions_x=detector_mean_positions_x,
             detector_mean_positions_y=detector_mean_positions_y)
-        del f.image
-        del f.mask
-        del f.inv_variance
+        del im.image
+        del im.mask
+        del im.inv_variance
 
-        hdr = fits.getheader(f)
+        hdr = fits.getheader(im.fullname)
         #  TODO : use astropy fits to propagate header with WCS from parent image
         # Save output images to files
         if isinstance(result.diff, np.ndarray):
             IO.write_image(result.diff,
-                           params.loc_output + os.path.sep + 'd_' + f.name,
+                           params.loc_output + os.path.sep + 'd_' + im.name,
                            header=hdr)
             #IO.write_image(result.model,
             #               params.loc_output + os.path.sep + 'm_' + f.name)
@@ -289,7 +294,6 @@ def do_everything(params=None):
     print('Determining list of input images')
 
     input_file_basenames = os.listdir(params.loc_input)
-
     input_file_paths = []
     for f in input_file_basenames:
         if fnmatch.fnmatch(f, params.name_pattern):
@@ -313,9 +317,24 @@ def do_everything(params=None):
         refimpath = os.path.join(params.loc_output, params.ref_image)
         refim = DS.Observation(refimpath, params)
 
+    trim_file_basenames = os.listdir(params.loc_trim)
+    trim_file_paths = []
+    # read in a list of input images for creating the ref image
+    ref_input_filenames = []
+    if os.path.exists(params.ref_image_list):
+        fin = open(params.ref_image_list, 'r')
+        ref_input_filenames = [os.path.basename(f.strip())
+                               for f in fin.readlines()]
+        fin.close()
+
+    for f in trim_file_basenames:
+        if fnmatch.fnmatch(f, params.name_pattern):
+            if f not in ref_input_filenames:
+                trim_file_paths.append(os.path.join(params.loc_trim,f))
+    print("Trimmed files to subtract: %s"%str(trim_file_paths))
     if params.dodiffs:
         print("Making diff images")
-        make_diff_images(input_file_paths, refim, params)
+        make_diff_images(trim_file_paths, refim, params)
     return
 
 
