@@ -25,8 +25,8 @@ def read_fits_file(file, slice=None):
     return np.float64(data), hdr
 
 
-def write_image(image, file):
-    hdu = fits.PrimaryHDU(image.astype(np.float32))
+def write_image(image, file, header=None):
+    hdu = fits.PrimaryHDU(image.astype(np.float32), header=header)
     try:
         hdu.writeto(file, overwrite=True)
     except IOError:
