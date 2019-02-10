@@ -271,6 +271,7 @@ def make_reference(files, params, reference_image='ref.fits'):
         print('signal: mean, std, cut = ', np.mean(sig), np.std(sig), sigcut)
 
         print('Searching for best-seeing image')
+        best_seeing_ref = None
         for f in files:
             print(f.name, f.fw, f.sky, f.signal)
             if (f.fw < ref_seeing) and (
@@ -280,6 +281,9 @@ def make_reference(files, params, reference_image='ref.fits'):
                 ref_sky = f.sky
                 ref_seeing = f.fw
                 best_seeing_ref = f
+        if best_seeing_ref is None:
+            print("No ref image satisfies requiremens to be best seeing ref.")
+            # TODO : raise an exception
 
         ref_list = []
         while len(ref_list) < params.min_ref_images:
