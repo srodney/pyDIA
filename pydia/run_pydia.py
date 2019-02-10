@@ -45,11 +45,12 @@ def set_default_parameters():
     parameters.loc_data = 'DIA_IN'
     parameters.loc_trim = 'DIA_TRIM'
     parameters.loc_output = 'DIA_OUT'
-    parameters.ref_image = None
+    parameters.wcs_ref_image = None
+    parameters.ref_image_list = None
     parameters.verbose = False
     return(parameters)
 
-def spin_and_trim(imlist, refimname, trimfrac=0.4, trimdir='DIA_TRIM',
+def spin_and_trim(imlist, wcsrefimname, trimfrac=0.4, trimdir='DIA_TRIM',
                   verbose=False):
     """ Rotate images to match the WCS of the reference image (spin) and then
     cut off a fraction of the outer region of the image (trim).
@@ -57,15 +58,15 @@ def spin_and_trim(imlist, refimname, trimfrac=0.4, trimdir='DIA_TRIM',
     """
     if verbose:
         print('Spinning Input Images: ' + str(imlist))
-        print("to match WCS of Ref image: " + refimname)
+        print("to match WCS Ref image: " + wcsrefimname)
         print("and trimming by : %i pct"%(trimfrac*100))
 
     if not os.path.exists(trimdir):
         os.makedirs(trimdir)
     trimmed_image_list = []
-    hdr_imref = fits.getheader(refimname)
+    hdr_imref = fits.getheader(wcsrefimname)
     wcs_imref = WCS(hdr_imref)
-    for imname in list(imlist) + [refimname]:
+    for imname in list(imlist) + [wcsrefimname]:
         imname_trimmed = os.path.join(
             trimdir, os.path.basename(imname).replace('.fits', '_trim.fits'))
         if os.path.isfile(imname_trimmed):
@@ -73,12 +74,12 @@ def spin_and_trim(imlist, refimname, trimfrac=0.4, trimdir='DIA_TRIM',
                   file=sys.stderr)
         if verbose:
             print("Reprojecting %s to x,y frame of %s " % (
-                imname, refimname), file=sys.stderr)
+                imname, wcsrefimname), file=sys.stderr)
         im = fits.open(imname)
-        if imname != refimname:
+        if imname != wcsrefimname:
             array, footprint = reproject_interp(im[0], hdr_imref)
         else:
-            # Ref image does not need reprojection
+            # WCS Ref image does not need reprojection
             array = im[0].data
 
         # Trim off the outer trimfrac to reduce chances of NaN errors due to
@@ -113,16 +114,6 @@ def make_diff_images(params):
         if params.verbose:
             print("Using CPU version of PyDIA.", file=sys.stderr)
 
-    if params.ref_image:
-        # User has provided a single image to use as the reference image, so
-        # write this into the refimagelist and update the params.
-        if params.verbose:
-            print("Setting ref image to %s"%params.ref_image, file=sys.stderr)
-        params.ref_image_list = 'ref_image_list.txt'
-        fout = open(params.ref_image_list, 'w')
-        print(params.ref_image, file=fout)
-        fout.close()
-
     init=datetime.datetime.now()
     time_int =  time.time()
     log_file= os.path.join(params.loc_output, "pydia_run_log.log")
@@ -132,19 +123,49 @@ def make_diff_images(params):
     f.write(str(init)+" processing "+params.loc_data +" in "+params.loc_output +"\n")
     f.close()
 
-    # first, spin and trim the input images
+    # Get a list of input images to process
+    input_image_list = glob.glob(
+        os.path.join(params.loc_input, params.name_pattern))
+
+    # first, spin and trim the input images to match the WCS ref image
     try:
+        # Choose the WCS reference image -- which all others get aligned with.
+        if not params.wcs_ref_image:
+            # If user has not provided a wcs ref image filename, just
+            # adopt the first image in the list
+            wcsrefimage = input_image_list[0]
+            if params.verbose:
+                print("Setting WCS ref image to %s" % wcsrefimage,
+                      file=sys.stderr)
+            params.wcs_ref_image = wcsrefimage
+
         if params.verbose:
-            print("Spinning WCS and trimming to match ref image",
+            print("Spinning and trimming to match WCS ref image",
                   file=sys.stderr)
 
-        image_list = glob.glob(os.path.join(params.loc_data, params.name_pattern))
-        #TODO : accommodate cases where more than one ref image provided
         trimmed_image_list = spin_and_trim(
-            image_list, params.ref_image, trimfrac=params.trimfrac,
+            input_image_list, params.wcs_ref_image, trimfrac=params.trimfrac,
             trimdir=params.loc_trim, verbose=params.verbose)
-        params.ref_image = trimmed_image_list[-1]
+        params.wcs_ref_image = trimmed_image_list[-1]
         params.loc_data = params.loc_trim
+
+        # update the ref_image_list to point to the trimmed images
+        if os.path.exists(params.ref_image_list):
+            fin = open(params.ref_image_list,'r')
+            refimagelist = fin.readlines()
+            fin.close()
+            fout = open(params.ref_image_list,'w')
+            for refimname in refimagelist:
+                refimtrim_basename = os.path.basename(refimname).replace(
+                    '.fits', '_trim.fits')
+                refimtrim_path = os.path.join(
+                    params.loc_trim, refimtrim_basename)
+                if os.path.exists(refimtrim_path):
+                    fout.write(refimtrim_path)
+                else:
+                    print('Missing trimmed image from ref list %s'%refimtrim_path)
+            fout.close()
+
         # TODO : write something useful to the log file
     except:
         out=datetime.datetime.now()
@@ -248,7 +269,7 @@ def viewHelp():
     print("--psf_fit_radius (3.0) Radius (in pixels) for PSF photometry.")
     print("--psf_profile_type (gaussian) The only option at present.")
     print("--readnoise (1.0) CCD readout noise (e)")
-    print("--ref_image (None) Provide a single image to use as the reference image (supersedes ref_include_file).")
+    print("--wcs_ref_image (None) Provide a single image to use as the WCS reference image.")
     print("--ref_image_list (ref.images) List of images used to create the reference.")
     print("--ref_include_file (None) If this file exists, it should contain a list of images to use for the photometric reference")
     print("--ref_exclude_file (None) If this file exists, it should contain a list of images to exclude from the photometric reference")
@@ -332,8 +353,8 @@ def main(argv):
             "make_difference_images=", "mask_cluster=", "min_ref_images=", "n_parallel=",
             "name_pattern=", "nstamps=", "pdeg=", "pixel_max=", "pixel_min=",
             "pixel_rejection_threshold=", "preconvolve_images=", "preconvolve_FWHM=",
-            "psf_fit_radius=", "psf_profile_type=", "readnoise=", "ref_image=",
-             "ref_image_list=",
+            "psf_fit_radius=", "psf_profile_type=", "readnoise=",
+            "wcs_ref_image=", "ref_image_list=",
             "ref_include_file=", "ref_exclude_file=", "reference_min_seeing=",
             "reference_max_roundness=", "reference_seeing_factor=", "reference_sky_factor=",
             "registration_image=", "sdeg=", "sky_degree=", "sky_subtract_mode=",
@@ -366,11 +387,23 @@ def main(argv):
             val=getTypeValue(arg)
             parameters.__dict__[item] = val
 
+    if os.path.exists('ref_image_list.txt'):
+        parameters.ref_image_list = 'ref_image_list.txt'
+
     # If the REF subdir exists, assume it holds the desired ref image
+    # or a set of images to combine into a composite ref image
     refdir = os.path.join(parameters.loc_data, 'REF')
     if os.path.isdir(refdir):
         refimlist = glob.glob(os.path.join(refdir,"*.fits"))
         parameters.ref_image = refimlist[0]
+        if not os.path.exists(parameters.ref_image_list):
+            parameters.ref_image_list = 'ref_image_list.txt'
+            fout = open(parameters.ref_image_list, 'w')
+            fout.write('\n'.join(refimlist))
+            fout.close()
+            if parameters.verbose:
+                print("Wrote out ref image input file list"
+                      " to %s"%parameters.ref_image_list, file=sys.stderr)
 
     make_diff_images(parameters)
 
