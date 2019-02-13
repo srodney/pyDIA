@@ -56,6 +56,20 @@ def set_default_parameters():
     return(parameters)
 
 
+def copy_wcs(wcs_source_file, wcs_target_file):
+    """ Copy the WCS header keywords from the source file into the
+    target file.
+    """
+    hdr_src = fits.getheader(wcs_source_file)
+    wcs_src = WCS(hdr_src)
+
+    im = fits.open(wcs_target_file, 'update')
+    im[0].header.update(wcs_src.to_header())
+    im.flush(output_verify='fix+warn')
+    im.close()
+    return
+
+
 def spin_and_trim(imlist, wcsrefimname, trimfrac=0.4, trimdir='DIA_TRIM',
                   verbose=False):
     """ Rotate images to match the WCS of the WCS reference image (spin) and
@@ -201,6 +215,8 @@ def make_ref_image(params):
     registered_refimlist = register_images([refim], params)
 
     # TODO : we need to add a header and WCS?
+    copy_wcs(ref_image_list[0].fullname, refimpath)
+    copy_wcs(ref_image_list[0].fullname, registered_refimlist[0].fullname)
     return(refim)
 
 
