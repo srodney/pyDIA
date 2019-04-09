@@ -40,6 +40,7 @@ def set_default_parameters():
     parameters.pixel_min = 0.
     parameters.pixel_max = 50000.
 
+    parameters.reference_seeing_factor = 1.3
     parameters.loc_input = 'DIA_IN'
     parameters.loc_data = 'DIA_IN'
     parameters.loc_trim = 'DIA_TRIM'
@@ -356,9 +357,7 @@ def do_everything(params=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Measure aperture and/or PSF photometry on drizzled HST '
-                    ' images using either the PythonPhot routines or the '
-                    'astropy-affiliated photutils package.')
+        description='Run the PyDIA difference image construction pipeline')
 
     # No required positional arguments
     # parser.add_argument('required_arg', help='Required positional argument.')
