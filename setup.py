@@ -1,5 +1,8 @@
 from setuptools import setup
 from setuptools.extension import Extension
+import os
+import shutil
+import glob
 
 extensions = [Extension('pydia/c_functions_dp',
                         sources=['pydia/c_functions_dp.c'])]
@@ -14,3 +17,10 @@ setup(
     zip_safe=False,
     ext_modules=extensions,
 )
+
+# Catch an unusually-named object file created by cpython on a mac
+if not os.path.isfile('pydia/c_functions_dp.so'):
+    sofiles = glob.glob("c_functions_dp.*so")
+    if len(sofiles)>0:
+        sofile = sofiles[0]
+        os.rename(sofile, 'pydia/c_functions_dp.so')

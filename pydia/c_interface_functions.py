@@ -281,8 +281,7 @@ def compute_matrix_and_vector_cuda(R, RB, T, Vinv, mask, kernelIndex,
     V = np.zeros(hs).astype(np.float64).copy()
 
     # Fill the elements of H
-    print
-    hs, ' * ', hs, ' elements'
+    print(hs, ' * ', hs, ' elements')
     k0 = kernelIndex[:, 0].astype(np.int32).copy()
     k1 = kernelIndex[:, 1].astype(np.int32).copy()
     if params.use_stamps:
@@ -317,11 +316,13 @@ def compute_matrix_and_vector_cuda(R, RB, T, Vinv, mask, kernelIndex,
                           kernelIndex.shape[0], np.int(kernelRadius), V, 256,
                           hs, np.float64(R), np.float64(RB), np.float64(T),
                           np.float64(Vinv), np.float64(mask))
-    return H, V, (R, RB)
+    RRB = (R, RB)
+    return H, V, RRB
 
 
-def compute_model_cuda(image_size, (R, RB), c, kernelIndex, extendedBasis,
+def compute_model_cuda(image_size, texref, c, kernelIndex, extendedBasis,
                        params):
+    R, RB = texref
     # Create a numpy array for the model M
     M = np.zeros(image_size).astype(np.float64).copy()
 

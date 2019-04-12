@@ -1,5 +1,4 @@
 from __future__ import print_function
-import c_interface_functions as CI
 #  pyDIA
 #
 #  This software implements the difference-imaging algorithm of Bramich et al. (2010)
@@ -40,7 +39,7 @@ import io_functions as IO
 import image_functions as IM
 import photometry_functions as PH
 
-import c_interface_functions as CIF
+import c_interface_functions as CI
 
 
 def difference_image(ref, target, params, stamp_positions=None, psf_image=None,
@@ -98,7 +97,7 @@ def difference_image(ref, target, params, stamp_positions=None, psf_image=None,
         #
         # Compute the matrix and vector
         #
-        H, V, texref = CI.compute_matrix_and_vector_cuda(ref.image, ref.blur,
+        H, V, RRB = CI.compute_matrix_and_vector_cuda(ref.image, ref.blur,
                                                          target.image,
                                                          target.inv_variance,
                                                          tmask, kernelIndex,
@@ -127,7 +126,7 @@ def difference_image(ref, target, params, stamp_positions=None, psf_image=None,
         # Compute the model image
         #
         print('Computing model', time.time() - start)
-        g.model = CI.compute_model_cuda(ref.image.shape, texref, c,
+        g.model = CI.compute_model_cuda(ref.image.shape, RRB, c,
                                         kernelIndex, extendedBasis, params)
 
         #
