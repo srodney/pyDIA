@@ -271,15 +271,21 @@ def make_reference(files, params, reference_image='ref.fits'):
 
         print('Searching for best-seeing image')
         best_seeing_ref = None
-        for f in files:
-            print(f.name, f.fw, f.sky, f.signal)
-            if (f.fw < ref_seeing) and (
-                    f.fw > params.reference_min_seeing) and (
-                    f.roundness < params.reference_max_roundness) and (
-                    f.signal > sigcut) and not (f.name in reference_exclude):
-                ref_sky = f.sky
-                ref_seeing = f.fw
-                best_seeing_ref = f
+        if len(files)==1:
+            f = files[0]
+            ref_sky = f.sky
+            ref_seeing = f.fw
+            best_seeing_ref = f
+        else:
+            for f in files:
+                print(f.name, f.fw, f.sky, f.signal)
+                if (f.fw < ref_seeing) and (
+                        f.fw > params.reference_min_seeing) and (
+                        f.roundness < params.reference_max_roundness) and (
+                        f.signal > sigcut) and not (f.name in reference_exclude):
+                    ref_sky = f.sky
+                    ref_seeing = f.fw
+                    best_seeing_ref = f
         if best_seeing_ref is None:
             print("No ref image satisfies requiremens to be best seeing ref.")
             # TODO : raise an exception
@@ -291,15 +297,18 @@ def make_reference(files, params, reference_image='ref.fits'):
             print('Cutoff FWHM for reference = ',
                   params.reference_seeing_factor * ref_seeing)
             print('Combining for reference:')
-            for f in files:
-                if (f.fw < params.reference_seeing_factor * ref_seeing) and (
-                        f.roundness < params.reference_max_roundness) and (
-                        f.sky < params.reference_sky_factor * ref_sky) and (
-                        f.fw > params.reference_min_seeing) and (
-                        f.signal > sigcut) and not (
-                        f.name in reference_exclude):
-                    ref_list.append(f)
-                    print(f.name, f.fw, f.sky, f.signal)
+            if len(files)==1:
+                ref_list.append(f)
+            else:
+                for f in files:
+                    if (f.fw < params.reference_seeing_factor * ref_seeing) and (
+                            f.roundness < params.reference_max_roundness) and (
+                            f.sky < params.reference_sky_factor * ref_sky) and (
+                            f.fw > params.reference_min_seeing) and (
+                            f.signal > sigcut) and not (
+                            f.name in reference_exclude):
+                        ref_list.append(f)
+                        print(f.name, f.fw, f.sky, f.signal)
             params.reference_seeing_factor *= 1.02
 
         sig = []
