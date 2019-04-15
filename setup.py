@@ -24,3 +24,5 @@ if not os.path.isfile('pydia/c_functions_dp.so'):
     if len(sofiles)>0:
         sofile = sofiles[0]
         os.rename(sofile, 'pydia/c_functions_dp.so')
+        print("Renamed %s to %s"%(sofile, 'pydia/c_functions_dp.so'))
+
